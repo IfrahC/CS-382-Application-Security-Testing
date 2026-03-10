@@ -32,7 +32,14 @@ Brute force attacks attempt to guess credentials by systematically trying many c
 
 ### Security Level: Low
 
-**Result:** Username and password `admin` and `password` found successfully.
+**Payload Used:**
+
+```bash
+username: admin
+password: password
+```
+
+**Result:** Username and password found successfully.
 
 > ![Screenshot: Brute Force – Low – successful credential discovery](screenshots/brute-force/brute-force-low.png)
 
@@ -43,6 +50,11 @@ No rate limiting, no account lockout, no CAPTCHA. Requests are processed as fast
 
 ### Security Level: Medium
 
+```bash
+username: admin
+password: password
+```
+
 **Result:** A `sleep(2)` delay is introduced per failed attempt, slowing brute force but not stopping it.
 
 > ![Screenshot: Brute Force – Medium – successful credential discovery](screenshots/brute-force/brute-force-medium.png)
@@ -50,6 +62,11 @@ No rate limiting, no account lockout, no CAPTCHA. Requests are processed as fast
 ---
 
 ### Security Level: High
+
+```bash
+username: admin
+password: password
+```
 
 **Result:** Anti-CSRF token required per request. Each request needs a valid, fresh token, making automated brute force extremely difficult without token-harvesting logic.
 
@@ -78,22 +95,12 @@ Command Injection allows an attacker to execute arbitrary OS commands by appendi
 
 **Steps:**
 
-1. Navigated to **Command Injection** module.
-2. Entered the payload in the IP address field.
-3. Clicked **Submit**.
+> ![Screenshot: Command Injection – Low](screenshots/command-injection/command-injection-low.png)
 
 **Result:** The `ping` command ran, then `cat /etc/passwd` executed and its output was displayed on the page.
 
-> 📸 **[Screenshot: Command Injection – Low – /etc/passwd contents displayed]**
-
 **Why it worked:**  
 DVWA passes input directly to `shell_exec()`:
-
-```php
-$cmd = shell_exec('ping -c 4 ' . $target);
-```
-
-The `;` separator causes the shell to execute the second command after the first.
 
 ---
 
@@ -105,9 +112,9 @@ The `;` separator causes the shell to execute the second command after the first
 127.0.0.1 && cat /etc/passwd
 ```
 
-**Result:** `;` and `&&` on their own are sometimes blocked, but `&&` succeeds at Medium.
+> ![Screenshot: Command Injection – Medium](screenshots/command-injection/command-injection-medium.png)
 
-> 📸 **[Screenshot: Command Injection – Medium – && payload success]**
+**Result:** `;` and `&&` on their own are sometimes blocked, but `&&` succeeds at Medium.
 
 **Why it worked:**  
 Medium only blacklists `&&` and `;` inconsistently — the filter is bypassable with `|` or `&&` depending on implementation. The blacklist does not cover all shell separators.
@@ -119,16 +126,14 @@ Medium only blacklists `&&` and `;` inconsistently — the filter is bypassable 
 **Payload Attempted:**
 
 ```bash
-127.0.0.1| cat /etc/passwd
+127.0.0.1|whoami
 ```
 
-**Result:** Failed.
+> ![Screenshot: Command Injection – High](screenshots/command-injection/command-injection-high.png)
 
-> 📸 **[Screenshot: Command Injection – High – blocked]**
+**Result:** The `|` without surrounding spaces works.
 
-**Why it failed:**  
-High level uses a comprehensive blacklist or a whitelist approach that only permits valid IP address characters (digits and `.`). Input not matching the pattern is rejected outright.
-
+**Why it worked:** The high-security source code blacklists specific characters but the `|` without surrounding spaces is often missed by the filter.
 ---
 
 ## 3. CSRF (Cross-Site Request Forgery)
