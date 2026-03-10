@@ -56,7 +56,7 @@ No rate limiting, no account lockout, no CAPTCHA. Requests are processed as fast
 > ![Screenshot: Brute Force – Medium – successful credential discovery](screenshots/brute-force/brute-force-high.png)
 
 **Why it failed:**  
-High level requires a user-specific token per login attempt. An automated tool would need to parse the HTML response, extract the token, and include it in each subsequent request — computationally expensive and rate-limited.
+High level requires a user-specific token per login attempt. An automated tool would need to parse the HTML response, extract the token, and include it in each subsequent request which makes it computationally expensive and rate-limited.
 
 ---
 
@@ -432,19 +432,43 @@ Blind SQL Injection is a type of SQL Injection where the attacker does not see t
 
 ### Security Level: Low
 
-> 📸 **[Screenshot: SQL Injection Blind – Low]**
+**Payload Attempted:**
+
+```sql
+1' AND'1'='1'
+```
+
+**Result:** Attack failed. A token-based mechanism and PDO prepared statements prevent injection.
+
+> ![Screenshot: SQL Injection Blind – Low](screenshots/sql-injection-blind/sql-injection-blind-low.png)
 
 ---
 
 ### Security Level: Medium
 
-> 📸 **[Screenshot: SQL Injection Blind – Medium]**
+**Payload Attempted:**
+
+```sql
+1' OR '1'='1
+```
+
+**Result:** Attack failed. A token-based mechanism and PDO prepared statements prevent injection.
+
+> ![Screenshot: SQL Injection Blind – Medium](screenshots/sql-injection-blind/sql-injection-blind-medium.png)
 
 ---
 
 ### Security Level: High
 
-> 📸 **[Screenshot: SQL Injection Blind – High]**
+**Payload Attempted:**
+
+```sql
+1' OR '1'='1
+```
+
+**Result:** Attack failed. A token-based mechanism and PDO prepared statements prevent injection.
+
+> ![Screenshot: SQL Injection Blind – High](screenshots/sql-injection-blind/sql-injection-blind-high.png)
 
 ---
 
